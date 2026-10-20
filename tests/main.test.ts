@@ -640,6 +640,34 @@ describe("Plugin tests", () => {
     expect(updatedComment.body).not.toContain(`[^01^]: 88% similar to issue: [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})`);
   });
 
+  it("When a repository is private and redactPrivateRepoComments is false (default), it should store markdown and payload", async () => {
+    const { context } = createContext(DEFAULT_BODY, 1, 1, 1, "privateDefaultComment", DEFAULT_ISSUE_ID);
+    context.payload.repository.private = true;
+    await runPlugin(context);
+
+    const comment = (await context.adapters.supabase.comment.getComment("privateDefaultComment")) as unknown as CommentMock;
+    expect(comment).toBeDefined();
+    expect(comment.markdown).toBe(DEFAULT_BODY);
+    expect(comment.payload).not.toBeNull();
+    expect(comment.embedding[0]).toBe(1);
+  });
+
+  it("When a repository is private and redactPrivateRepoComments is true, it should redact markdown and payload", async () => {
+    const { context } = createContext(DEFAULT_BODY, 1, 1, 1, "privateRedactedComment", DEFAULT_ISSUE_ID);
+    context.payload.repository.private = true;
+    context.config = {
+      ...context.config,
+      redactPrivateRepoComments: true,
+    };
+    await runPlugin(context);
+
+    const comment = (await context.adapters.supabase.comment.getComment("privateRedactedComment")) as unknown as CommentMock;
+    expect(comment).toBeDefined();
+    expect(comment.markdown).toBeNull();
+    expect(comment.payload).toBeNull();
+    expect(comment.embedding[0]).toBe(0);
+  });
+
   function createContext(
     commentBody: string = "Hello, world!",
     repoId: number = 1,
@@ -702,6 +730,7 @@ describe("Plugin tests", () => {
         jobMatchingThreshold: 0.95,
         annotateThreshold: 0.65,
         demoFlag: false,
+        redactPrivateRepoComments: false,
       },
       command: null,
       adapters: {} as Context["adapters"],

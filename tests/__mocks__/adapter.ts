@@ -7,6 +7,7 @@ import { stripHtmlComments } from "../../src/utils/markdown-comments";
 
 export interface CommentMock {
   id: string;
+  markdown?: string | null;
   author_id: number;
   payload?: Record<string, unknown> | null;
   type?: string;
@@ -35,12 +36,15 @@ export function createMockAdapters(context: Context) {
           if (commentMap.has(commentData.id)) {
             throw new Error("Comment already exists");
           }
+          const shouldRedact = Boolean(commentData.isPrivate && context.config.redactPrivateRepoComments);
           const cleanedMarkdown = commentData.markdown ? stripHtmlComments(commentData.markdown).trim() : "";
-          const embeddingSource = commentData.isPrivate ? "" : cleanedMarkdown;
+          const embeddingSource = shouldRedact ? "" : cleanedMarkdown;
           const embedding = await context.adapters.voyage.embedding.createEmbedding(embeddingSource);
           commentMap.set(commentData.id, {
             id: commentData.id,
+            markdown: shouldRedact ? null : commentData.markdown,
             author_id: commentData.author_id,
+            payload: shouldRedact ? null : commentData.payload,
             embedding,
             issue_id: commentData.issue_id,
           });
@@ -51,14 +55,16 @@ export function createMockAdapters(context: Context) {
             console.log("Current comment map", commentMap);
             throw new Error(STRINGS.COMMENT_DOES_NOT_EXIST);
           }
+          const shouldRedact = Boolean(commentData.isPrivate && context.config.redactPrivateRepoComments);
           const cleanedMarkdown = commentData.markdown ? stripHtmlComments(commentData.markdown).trim() : "";
-          const embeddingSource = commentData.isPrivate ? "" : cleanedMarkdown;
+          const embeddingSource = shouldRedact ? "" : cleanedMarkdown;
           const embedding = await context.adapters.voyage.embedding.createEmbedding(embeddingSource);
           commentMap.set(commentData.id, {
             id: commentData.id,
+            markdown: shouldRedact ? null : commentData.markdown,
             author_id: commentData.author_id,
             embedding,
-            payload: commentData.payload,
+            payload: shouldRedact ? null : commentData.payload,
             issue_id: commentData.issue_id,
           });
         }),
@@ -118,10 +124,20 @@ export function createMockAdapters(context: Context) {
           return [];
         }),
         createIssue: jest.fn(async (issue: IssueData) => {
-          issueMap.set(issue.id, issue);
+          const shouldRedact = Boolean(issue.isPrivate && context.config.redactPrivateRepoComments);
+          issueMap.set(issue.id, {
+            ...issue,
+            markdown: shouldRedact ? null : issue.markdown,
+            payload: shouldRedact ? null : issue.payload,
+          });
         }),
         updateIssue: jest.fn(async (issue: IssueData) => {
-          issueMap.set(issue.id, issue);
+          const shouldRedact = Boolean(issue.isPrivate && context.config.redactPrivateRepoComments);
+          issueMap.set(issue.id, {
+            ...issue,
+            markdown: shouldRedact ? null : issue.markdown,
+            payload: shouldRedact ? null : issue.payload,
+          });
         }),
       },
       fetchComments: jest.fn(async (issueId: string) => {
