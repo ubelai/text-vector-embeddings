@@ -180,17 +180,12 @@ describe("Plugin tests", () => {
       });
 
       context2.octokit.rest.issues.update = mock(async (params: { owner: string; repo: string; issue_number: number; body: string }) => {
-        // Find the most similar sentence (first sentence in this case)
-        const updatedBody =
-          warningThresholdIssue2.issue_body.replace(STRINGS.SIMILAR_ISSUE_TITLE, `${STRINGS.SIMILAR_ISSUE_TITLE}[^01^]`) +
-          `\n\n[^01^]: ⚠ 80% possible duplicate - [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})\n\n`;
-
         db.issue.update({
           where: {
             number: { equals: params.issue_number },
           },
           data: {
-            body: updatedBody,
+            body: params.body,
           },
         });
       }) as unknown as typeof octokit.rest.issues.update;
@@ -199,7 +194,9 @@ describe("Plugin tests", () => {
 
       const issue = db.issue.findFirst({ where: { node_id: { equals: "warning2" } } }) as unknown as Context["payload"]["issue"];
       expect(issue.state).toBe("open");
-      expect(issue.body).toContain(`[^01^]: ⚠ 80% possible duplicate - [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})`);
+      const modifiedIssueUrl = STRINGS.ISSUE_URL.replace("https://github.com", "https://www.github.com");
+      expect(issue.body).toContain(`[^01^]: ⚠ 80% possible duplicate - [${STRINGS.SIMILAR_ISSUE}](${modifiedIssueUrl})`);
+      expect(issue.body).not.toContain(`${modifiedIssueUrl}#3`);
     }
   );
 
@@ -261,13 +258,12 @@ describe("Plugin tests", () => {
 
     context2.octokit.rest.issues.update = mock(
       async (params: { owner: string; repo: string; issue_number: number; body?: string; state?: string; state_reason?: string }) => {
-        const updatedBody = `${matchThresholdIssue2.issue_body}\n\n>[!CAUTION]\n> This issue may be a duplicate of the following issues:\n> - [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})\n`;
         db.issue.update({
           where: {
             number: { equals: params.issue_number },
           },
           data: {
-            ...(params.body && { body: updatedBody }),
+            ...(params.body && { body: params.body }),
             ...(params.state && { state: params.state }),
             ...(params.state_reason && { state_reason: params.state_reason }),
           },
@@ -277,11 +273,13 @@ describe("Plugin tests", () => {
 
     await runPlugin(context2);
     const issue = db.issue.findFirst({ where: { number: { equals: 4 } } }) as unknown as Context["payload"]["issue"];
+    const modifiedIssueUrl = STRINGS.ISSUE_URL.replace("https://github.com", "https://www.github.com");
     expect(issue.state).toBe("closed");
     expect(issue.state_reason).toBe("not_planned");
     expect(issue.body).toContain(">[!CAUTION]");
     expect(issue.body).toContain("This issue may be a duplicate of the following issues:");
-    expect(issue.body).toContain(`- [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})`);
+    expect(issue.body).toContain(`- [${STRINGS.SIMILAR_ISSUE}](${modifiedIssueUrl})`);
+    expect(issue.body).not.toContain(`${modifiedIssueUrl}#3`);
   });
 
   it("When issue matching is triggered, it should suggest contributors based on similarity", async () => {
@@ -507,17 +505,12 @@ describe("Plugin tests", () => {
     }) as unknown as typeof octokit.rest.issues.listComments;
 
     context2.octokit.rest.issues.updateComment = mock(async (params: { owner: string; repo: string; comment_id: number; body: string }) => {
-      // Find the most similar sentence (first sentence in this case)
-      const updatedBody =
-        annotateComment.body.replace(STRINGS.SIMILAR_COMMENT, `${STRINGS.SIMILAR_COMMENT}[^01^]`) +
-        `\n\n[^01^]: 88% similar to issue: [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})\n\n`;
-
       db.issueComments.update({
         where: {
           id: { equals: params.comment_id },
         },
         data: {
-          body: updatedBody,
+          body: params.body,
         },
       });
     }) as unknown as typeof octokit.rest.issues.updateComment;
@@ -525,7 +518,9 @@ describe("Plugin tests", () => {
     await runPlugin(context2);
 
     const updatedComment = db.issueComments.findFirst({ where: { id: { equals: 1 } } }) as unknown as Context<"issue_comment.created">["payload"]["comment"];
-    expect(updatedComment.body).toContain(`[^01^]: 88% similar to issue: [${STRINGS.SIMILAR_ISSUE}](${STRINGS.ISSUE_URL})`);
+    const modifiedIssueUrl = STRINGS.ISSUE_URL.replace("https://github.com", "https://www.github.com");
+    expect(updatedComment.body).toContain(`[^01^]: 88% similar to issue: [${STRINGS.SIMILAR_ISSUE}](${modifiedIssueUrl})`);
+    expect(updatedComment.body).not.toContain(`${modifiedIssueUrl}#9`);
   });
 
   it("When demoFlag is true, it should skip storing issues in the database", async () => {
